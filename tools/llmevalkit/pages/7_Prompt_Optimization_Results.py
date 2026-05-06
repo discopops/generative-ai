@@ -39,12 +39,12 @@ def list_custom_training_jobs(project_id: str, location: str):
 
     Args:
         project_id: The Google Cloud project ID.
-        location: The region for the Vertex AI jobs, e.g., "us-central1".
+        location: The region for the Agent Platform jobs, e.g., "us-central1".
 
     Returns:
         A list of dictionaries, where each dictionary contains details of a custom job.
     """
-    # Initialize the Vertex AI client
+    # Initialize the Agent Platform client
     # The API endpoint is determined by the location
     client_options = {"api_endpoint": f"{location}-aiplatform.googleapis.com"}
     client = aiplatform.gapic.JobServiceClient(client_options=client_options)
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     # Ensure you have authenticated with Google Cloud CLI:
     # gcloud auth application-default login
 
-    # And have the necessary permissions (e.g., "Vertex AI User" role)
+    # And have the necessary permissions (e.g., "Agent Platform User" role)
 
     try:
         all_jobs = list_custom_training_jobs(project_id=PROJECT_ID, location=LOCATION)
@@ -163,6 +163,9 @@ def _display_interactive_results(results_ui: vapo_lib.ResultsUI) -> None:
         ):
             logger.info(
                 "ResultsUI object does not have 'templates' or 'eval_results', or templates list is empty. Falling back."
+            )
+            st.info(
+                "No completed runs found yet in this directory. The evaluation might still be running or failed to produce results."
             )
         else:
             processed_results_for_tabs = []
@@ -454,7 +457,7 @@ def main() -> None:
 
         if job_status == "JOB_STATE_FAILED":
             st.error(
-                "This optimization job has failed. Please check the logs in the Vertex AI console for more details."
+                "This optimization job has failed. Please check the logs in the Agent Platform console for more details."
             )
             return
         if job_status not in ["JOB_STATE_SUCCEEDED", "JOB_STATE_CANCELLED"]:

@@ -47,7 +47,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TARGET_MODELS = ["gemini-2.0-flash-001", "gemini-2.0-flash-lite-001"]
+TARGET_MODELS = [
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-lite-001",
+    "gemini-1.5-pro-002",
+    "gemini-1.5-flash-002",
+]
 
 
 def initialize_session_state() -> None:
@@ -231,19 +238,30 @@ def dataset_selection() -> None:
 
     st.button("Load Dataset", key="load_existing_dataset_button")
     if st.session_state.load_existing_dataset_button:
-        gcs_uri = f"gs://{os.getenv('BUCKET')}/datasets/{st.session_state.selected_dataset}/{st.session_state.selected_file_from_dataset}"
-        logger.info("Loading file: %s", gcs_uri)
-        if st.session_state.selected_file_from_dataset.endswith(".jsonl"):
-            st.session_state.dataset = pd.read_json(gcs_uri, lines=True)
+        if not st.session_state.get("selected_dataset") or not st.session_state.get(
+            "selected_file_from_dataset"
+        ):
+            st.warning("Please select a dataset and a file first.")
         else:
-            st.session_state.dataset = pd.read_csv(gcs_uri)
+            gcs_uri = f"gs://{os.getenv('BUCKET')}/datasets/{st.session_state.selected_dataset}/{st.session_state.selected_file_from_dataset}"
+            logger.info("Loading file: %s", gcs_uri)
+            if st.session_state.selected_file_from_dataset.endswith(".jsonl"):
+                st.session_state.dataset = pd.read_json(gcs_uri, lines=True)
+            else:
+                st.session_state.dataset = pd.read_csv(gcs_uri)
 
     if st.session_state.dataset is not None:
         st.dataframe(st.session_state.dataset)
 
 
 def get_optimization_args(
-    input_optimization_data_file_uri, output_optimization_run_uri
+    input_optimization_data_file_uri,
+    output_optimization_run_uri,
+    target_model,
+    target_qps=1.0,
+    optimizer_qps=1.0,
+    eval_qps=1.0,
+    data_limit=10,
 ):
     """Gets the arguments for the optimization job."""
     response_schema_str = st.session_state.local_prompt.prompt_meta.get(
@@ -278,7 +296,7 @@ def get_optimization_args(
             f"{st.session_state.local_prompt.prompt_to_run.prompt_data}"
             "\n\tAnswer: {target}"
         ),
-        target_model="gemini-2.0-flash-001",
+        target_model=target_model,
         optimization_mode="instruction",
         eval_metrics_types=[
             "question_answering_correctness",
@@ -296,15 +314,15 @@ def get_optimization_args(
         target_model_location="us-central1",
         source_model="",
         source_model_location="",
-        target_model_qps=1,
-        optimizer_model_qps=1,
-        eval_qps=1,
+        target_model_qps=target_qps,
+        optimizer_model_qps=optimizer_qps,
+        eval_qps=eval_qps,
         source_model_qps="",
         response_mime_type=response_mime_type,
         response_schema=response_schema_arg,
         language="English",
         placeholder_to_content=json.loads("{}"),
-        data_limit=10,
+        data_limit=data_limit,
         translation_source_field_name="",
         has_multimodal_inputs=has_multimodal,
     )
@@ -354,7 +372,13 @@ def start_optimization() -> None:
             return
 
         args = get_optimization_args(
-            input_optimization_data_file_uri, output_optimization_run_uri
+            input_optimization_data_file_uri,
+            output_optimization_run_uri,
+            st.session_state.target_model_optimization,
+            st.session_state.target_qps,
+            st.session_state.optimizer_qps,
+            st.session_state.eval_qps,
+            st.session_state.data_limit,
         )
 
         with st.expander("Prompt Optimization Config"):
@@ -408,6 +432,20 @@ def main() -> None:
         options=TARGET_MODELS,
         key="target_model_optimization",
     )
+
+    with st.expander("Advanced Settings"):
+        st.session_state.target_qps = st.number_input(
+            "Target Model QPS", min_value=0.1, max_value=10.0, value=1.0, step=0.1
+        )
+        st.session_state.optimizer_qps = st.number_input(
+            "Optimizer Model QPS", min_value=0.1, max_value=10.0, value=1.0, step=0.1
+        )
+        st.session_state.eval_qps = st.number_input(
+            "Evaluation QPS", min_value=0.1, max_value=10.0, value=1.0, step=0.1
+        )
+        st.session_state.data_limit = st.number_input(
+            "Data Limit (Sample Size)", min_value=1, max_value=1000, value=10, step=1
+        )
 
     prompt_selection()
     dataset_selection()
